@@ -9,6 +9,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+app.get('/', (req, res) => {
+  res.json({ status: "Server is live" });
+});
+
 // ===== CONFIG =====
 const SECRET_KEY = "YOUR_PAYSTACK_SECRET_KEY";
 const JWT_SECRET = "MY_SECRET_TOKEN";
