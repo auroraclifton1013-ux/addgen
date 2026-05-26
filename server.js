@@ -14,8 +14,9 @@ const SECRET_KEY = "YOUR_PAYSTACK_SECRET_KEY";
 const JWT_SECRET = "MY_SECRET_TOKEN";
 
 // ===== DATABASE =====
-mongoose.connect("mongodb://127.0.0.1:27017/adgen");
-
+mongoose.connect(process.env.MONGO_URI)
+.then(()=>console.log("DB connected"))
+.catch(err=>console.log("DB error:", err));
 const UserSchema = new mongoose.Schema({
   email: String,
   password: String,
