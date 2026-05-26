@@ -4,23 +4,29 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+require('dotenv').config();
 
 const app = express();
+
+// ===== MIDDLEWARE =====
 app.use(cors());
 app.use(express.json());
 
+/* ===== HOME ROUTE ===== */
 app.get('/', (req, res) => {
-  res.json({ status: "Server is live" });
+  res.json({ status: "Server is live 🚀" });
 });
 
-// ===== CONFIG =====
-const SECRET_KEY = "YOUR_PAYSTACK_SECRET_KEY";
-const JWT_SECRET = "MY_SECRET_TOKEN";
+/* ===== CONFIG (USE ENV VARIABLES) ===== */
+const SECRET_KEY = process.env.PAYSTACK_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET;
 
-// ===== DATABASE =====
+/* ===== DATABASE CONNECTION ===== */
 mongoose.connect(process.env.MONGO_URI)
-.then(()=>console.log("DB connected"))
-.catch(err=>console.log("DB error:", err));
+  .then(() => console.log("DB connected"))
+  .catch(err => console.log("DB error:", err));
+
+/* ===== USER MODEL ===== */
 const UserSchema = new mongoose.Schema({
   email: String,
   password: String,
@@ -29,60 +35,81 @@ const UserSchema = new mongoose.Schema({
 
 const User = mongoose.model("User", UserSchema);
 
-// ===== AUTH ROUTES =====
-
-// REGISTER
+/* ===== REGISTER ===== */
 app.post('/register', async (req, res) => {
-  const { email, password } = req.body;
+  try {
+    const { email, password } = req.body;
 
-  const hashed = await bcrypt.hash(password, 10);
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ error: "User already exists" });
+    }
 
-  const user = new User({ email, password: hashed });
-  await user.save();
+    const hashed = await bcrypt.hash(password, 10);
 
-  res.json({ message: "User created" });
+    const user = new User({ email, password: hashed });
+    await user.save();
+
+    res.json({ message: "User created successfully" });
+
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
 });
 
-// LOGIN
+/* ===== LOGIN ===== */
 app.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  try {
+    const { email, password } = req.body;
 
-  const user = await User.findOne({ email });
+    const user = await User.findOne({ email });
 
-  if (!user) return res.json({ error: "User not found" });
+    if (!user) return res.status(404).json({ error: "User not found" });
 
-  const valid = await bcrypt.compare(password, user.password);
-  if (!valid) return res.json({ error: "Wrong password" });
+    const valid = await bcrypt.compare(password, user.password);
+    if (!valid) return res.status(401).json({ error: "Wrong password" });
 
-  const token = jwt.sign({ id: user._id }, JWT_SECRET);
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "7d" });
 
-  res.json({ token, email: user.email, balance: user.balance });
+    res.json({
+      token,
+      email: user.email,
+      balance: user.balance
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
 });
 
-// VERIFY TOKEN MIDDLEWARE
+/* ===== AUTH MIDDLEWARE ===== */
 function auth(req, res, next) {
   const token = req.headers.authorization;
 
-  if (!token) return res.status(401).json({ error: "No token" });
+  if (!token) {
+    return res.status(401).json({ error: "No token provided" });
+  }
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.userId = decoded.id;
     next();
-  } catch {
+  } catch (err) {
     res.status(401).json({ error: "Invalid token" });
   }
 }
 
-// ===== PAYMENT VERIFY =====
+/* ===== PAYMENT VERIFY ===== */
 app.post('/verify-payment', auth, async (req, res) => {
-  const { reference } = req.body;
-
   try {
+    const { reference } = req.body;
+
     const response = await axios.get(
       `https://api.paystack.co/transaction/verify/${reference}`,
       {
-        headers: { Authorization: `Bearer ${SECRET_KEY}` }
+        headers: {
+          Authorization: `Bearer ${SECRET_KEY}`
+        }
       }
     );
 
@@ -95,14 +122,23 @@ app.post('/verify-payment', auth, async (req, res) => {
       user.balance += amount;
       await user.save();
 
-      res.json({ status: "success", amount, balance: user.balance });
-    } else {
-      res.json({ status: "failed" });
+      return res.json({
+        status: "success",
+        amount,
+        balance: user.balance
+      });
     }
 
-  } catch {
-    res.json({ status: "error" });
+    res.json({ status: "failed" });
+
+  } catch (err) {
+    res.status(500).json({ status: "error", message: err.message });
   }
 });
 
-app.listen(3000, () => console.log("Server running"));
+/* ===== START SERVER ===== */
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
