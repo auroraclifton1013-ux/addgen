@@ -12,21 +12,21 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-/* ===== HOME ROUTE ===== */
+// ===== HOME ROUTE =====
 app.get('/', (req, res) => {
   res.json({ status: "Server is live 🚀" });
 });
 
-/* ===== CONFIG (USE ENV VARIABLES) ===== */
+// ===== CONFIG (ENV VARIABLES) =====
 const SECRET_KEY = process.env.PAYSTACK_SECRET;
 const JWT_SECRET = process.env.JWT_SECRET;
 
-/* ===== DATABASE CONNECTION ===== */
+// ===== DATABASE (CLOUD FIXED) =====
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("DB connected"))
   .catch(err => console.log("DB error:", err));
 
-/* ===== USER MODEL ===== */
+// ===== USER MODEL =====
 const UserSchema = new mongoose.Schema({
   email: String,
   password: String,
@@ -35,13 +35,13 @@ const UserSchema = new mongoose.Schema({
 
 const User = mongoose.model("User", UserSchema);
 
-/* ===== REGISTER ===== */
+// ===== REGISTER =====
 app.post('/register', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
+    const existing = await User.findOne({ email });
+    if (existing) {
       return res.status(400).json({ error: "User already exists" });
     }
 
@@ -50,14 +50,14 @@ app.post('/register', async (req, res) => {
     const user = new User({ email, password: hashed });
     await user.save();
 
-    res.json({ message: "User created successfully" });
+    res.json({ message: "User created" });
 
   } catch (err) {
     res.status(500).json({ error: "Server error" });
   }
 });
 
-/* ===== LOGIN ===== */
+// ===== LOGIN =====
 app.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -69,7 +69,9 @@ app.post('/login', async (req, res) => {
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(401).json({ error: "Wrong password" });
 
-    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "7d" });
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, {
+      expiresIn: "7d"
+    });
 
     res.json({
       token,
@@ -82,24 +84,24 @@ app.post('/login', async (req, res) => {
   }
 });
 
-/* ===== AUTH MIDDLEWARE ===== */
+// ===== AUTH MIDDLEWARE =====
 function auth(req, res, next) {
   const token = req.headers.authorization;
 
   if (!token) {
-    return res.status(401).json({ error: "No token provided" });
+    return res.status(401).json({ error: "No token" });
   }
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.userId = decoded.id;
     next();
-  } catch (err) {
+  } catch {
     res.status(401).json({ error: "Invalid token" });
   }
 }
 
-/* ===== PAYMENT VERIFY ===== */
+// ===== VERIFY PAYMENT =====
 app.post('/verify-payment', auth, async (req, res) => {
   try {
     const { reference } = req.body;
@@ -136,7 +138,7 @@ app.post('/verify-payment', auth, async (req, res) => {
   }
 });
 
-/* ===== START SERVER ===== */
+// ===== SERVER START (FIXED FOR RENDER) =====
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
